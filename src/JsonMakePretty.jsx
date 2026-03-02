@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import './JsonMakePretty.css';
 
@@ -8,9 +8,14 @@ const JsonMakePretty = () => {
   const [error, setError] = useState('');
   const [selectedPath, setSelectedPath] = useState('');
   const [showPathPopup, setShowPathPopup] = useState(false);
-  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0, showBelow: false });
   const [indentSpaces, setIndentSpaces] = useState(2);
   const outputEditorRef = useRef(null);
+  const outputEditorContainerRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
+  const currentLineRef = useRef(null);
+  const isHoveringTooltipRef = useRef(false);
+  const lastMousePositionRef = useRef({ x: 0, y: 0 });
 
   const prettifyJson = (jsonString, spaces = indentSpaces) => {
     try {
@@ -29,6 +34,27 @@ const JsonMakePretty = () => {
       setOutputJson('');
     }
   };
+
+  const clearHoverTimeout = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  const hideTooltip = useCallback(() => {
+    if (!isHoveringTooltipRef.current) {
+      setShowPathPopup(false);
+      setSelectedPath('');
+      currentLineRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearHoverTimeout();
+    };
+  }, [clearHoverTimeout]);
 
   const handleInputChange = (value) => {
     setInputJson(value || '');
@@ -49,13 +75,14 @@ const JsonMakePretty = () => {
     setError('');
     setShowPathPopup(false);
     setSelectedPath('');
+    clearHoverTimeout();
   };
 
-  const copyPathToClipboard = () => {
+  const copyPathToClipboard = useCallback(() => {
     if (selectedPath) {
       navigator.clipboard.writeText(selectedPath);
     }
-  };
+  }, [selectedPath]);
 
   const getJsonPath = (lines, lineIndex) => {
     const stack = [];
@@ -148,17 +175,42 @@ const JsonMakePretty = () => {
     return path.join('.');
   };
 
+  const handleTooltipMouseEnter = useCallback(() => {
+    isHoveringTooltipRef.current = true;
+  }, []);
+
+  const handleTooltipMouseLeave = useCallback(() => {
+    isHoveringTooltipRef.current = false;
+    hideTooltip();
+  }, [hideTooltip]);
+
   const handleOutputEditorMount = (editor) => {
     outputEditorRef.current = editor;
     
-    editor.onMouseUp((e) => {
+    editor.onMouseMove((e) => {
       const position = e.target.position;
       
-      if (!position) {
+      if (!position || e.target.type !== 6) { 
+        clearHoverTimeout();
+        if (!isHoveringTooltipRef.current) {
+          hideTooltip();
+        }
         return;
       }
       
       const lineIndex = position.lineNumber - 1;
+      
+      if (currentLineRef.current === lineIndex && hoverTimeoutRef.current) {
+        return;
+      }
+      
+      clearHoverTimeout();
+      
+      if (currentLineRef.current !== lineIndex && showPathPopup) {
+        setShowPathPopup(false);
+      }
+      
+      currentLineRef.current = lineIndex;
       
       const model = editor.getModel();
       if (!model) {
@@ -172,40 +224,51 @@ const JsonMakePretty = () => {
         return;
       }
       
-      const path = getJsonPath(lines, lineIndex);
+      const mouseX = e.event.posx || e.event.clientX;
+      const mouseY = e.event.posy || e.event.clientY;
+      lastMousePositionRef.current = { x: mouseX, y: mouseY };
       
-      if (path) {
-        setSelectedPath(path);
-        setShowPathPopup(true);
+      hoverTimeoutRef.current = setTimeout(() => {
+        const path = getJsonPath(lines, lineIndex);
         
-        const editorDomNode = editor.getDomNode();
-        if (!editorDomNode) return;
-        
-        const editorRect = editorDomNode.getBoundingClientRect();
-        
-        // const mouseX = e.event.posx || e.event.clientX;
-        const mouseY = e.event.posy || e.event.clientY;
-        
-        const relativeX = 60;
-        const relativeY = mouseY - editorRect.top;
-        
-        setPopupPosition({
-          x: relativeX,
-          y: relativeY
-        });
-      }
+        if (path) {
+          setSelectedPath(path);
+          setShowPathPopup(true);
+          
+          const { x, y } = lastMousePositionRef.current;
+          
+          const tooltipHeight = 30; 
+          const offsetY = 15; 
+          const showBelow = y < tooltipHeight + offsetY + 10;
+          
+          setPopupPosition({
+            x: x,
+            y: showBelow ? y + offsetY : y - offsetY,
+            showBelow: showBelow
+          });
+        }
+      }, 1000);
+    });
+    
+    editor.onMouseLeave(() => {
+      clearHoverTimeout();
+      setTimeout(() => {
+        if (!isHoveringTooltipRef.current) {
+          hideTooltip();
+        }
+      }, 100);
     });
     
     editor.onDidScrollChange(() => {
-      if (showPathPopup) {
-        setShowPathPopup(false);
-      }
+      clearHoverTimeout();
+      setShowPathPopup(false);
+      currentLineRef.current = null;
     });
     
     editor.onDidChangeModelContent(() => {
-      if (showPathPopup) {
-        setShowPathPopup(false);
-      }
+      clearHoverTimeout();
+      setShowPathPopup(false);
+      currentLineRef.current = null;
     });
   };
 
@@ -258,7 +321,10 @@ const JsonMakePretty = () => {
         
         <div className="output-section">
           {error && <div className="error-message">{error}</div>}
-          <div className="monaco-editor-wrapper" style={{ position: 'relative' }}>
+          <div 
+            className="monaco-editor-wrapper" 
+            ref={outputEditorContainerRef}
+          >
             <Editor
               height="100%"
               defaultLanguage="json"
@@ -277,22 +343,25 @@ const JsonMakePretty = () => {
                 domReadOnly: true,
               }}
             />
-            {showPathPopup && (
-              <div 
-                className="path-tooltip" 
-                style={{ 
-                  left: `${popupPosition.x}px`, 
-                  top: `${popupPosition.y}px` 
-                }}
-                onClick={copyPathToClipboard}
-                title="Click to copy"
-              >
-                {selectedPath}
-              </div>
-            )}
           </div>
         </div>
       </div>
+      
+      {showPathPopup && (
+        <div 
+          className={`path-tooltip ${popupPosition.showBelow ? 'tooltip-below' : 'tooltip-above'}`}
+          style={{ 
+            left: `${popupPosition.x}px`, 
+            top: `${popupPosition.y}px` 
+          }}
+          onClick={copyPathToClipboard}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+          title="Click to copy"
+        >
+          {selectedPath}
+        </div>
+      )}
     </div>
   );
 };

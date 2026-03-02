@@ -141,20 +141,33 @@
 }
 
 .path-tooltip {
-  position: absolute;
+  position: fixed;
   background-color: #1e1e1e;
   color: #ffffff;
-  padding: 6px 12px;
+  padding: 0 12px;
   border-radius: 4px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 19px;
+  height: 19px;
   white-space: nowrap;
   z-index: 9999;
   pointer-events: auto;
   cursor: pointer;
   border: 1px solid #4e94ce;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  animation: fadeIn 0.2s ease-in;
+  display: inline-flex;
+  align-items: center;
+}
+
+.path-tooltip.tooltip-above {
+  transform: translate(-50%, -100%);
+  animation: fadeInAbove 0.2s ease-in;
+}
+
+.path-tooltip.tooltip-below {
+  transform: translate(-50%, 0);
+  animation: fadeInBelow 0.2s ease-in;
 }
 
 .path-tooltip:hover {
@@ -163,14 +176,25 @@
   border-color: #64b5f6;
 }
 
-@keyframes fadeIn {
+@keyframes fadeInAbove {
   from {
     opacity: 0;
-    transform: translateY(-5px);
+    transform: translate(-50%, calc(-100% + 5px));
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, -100%);
+  }
+}
+
+@keyframes fadeInBelow {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -5px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }
 
