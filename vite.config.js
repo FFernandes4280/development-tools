@@ -7,9 +7,9 @@ export default defineConfig({
   plugins: [react(), nodePolyfills()],
   build: {
     lib: {
-      entry: 'src/web-components/entry.js',
+      entry: path.resolve(__dirname, 'src/web-components/entry.js'),
       formats: ['es'],
-      fileName: () => 'wev-my-plans.esm.js'
+      fileName: () => 'json-formatter.esm.js'
     },
     rollupOptions: {
       external: []
