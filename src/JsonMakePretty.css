@@ -141,7 +141,6 @@
 }
 
 .path-tooltip {
-  position: fixed;
   background-color: #1e1e1e;
   color: #ffffff;
   padding: 0 12px;
@@ -160,12 +159,21 @@
   align-items: center;
 }
 
+.path-tooltip.tooltip-fixed {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  animation: fadeIn 0.2s ease-in;
+}
+
 .path-tooltip.tooltip-above {
+  position: fixed;
   transform: translate(-50%, -100%);
   animation: fadeInAbove 0.2s ease-in;
 }
 
 .path-tooltip.tooltip-below {
+  position: fixed;
   transform: translate(-50%, 0);
   animation: fadeInBelow 0.2s ease-in;
 }
@@ -174,6 +182,15 @@
   background-color: #2d2d30;
   color: #4fc3f7;
   border-color: #64b5f6;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeInAbove {

@@ -1,6 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor, { loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 import './JsonMakePretty.css';
+
+// Configure @monaco-editor/react to use locally bundled Monaco
+// instead of loading from CDN
+loader.config({ monaco });
+
+// Initialize Monaco immediately
+loader.init().then(() => {
+  console.log('[JSON Formatter] Monaco Editor initialized locally');
+}).catch((err) => {
+  console.error('[JSON Formatter] Monaco initialization failed:', err);
+});
 
 const JsonMakePretty = () => {
   const [inputJson, setInputJson] = useState('');
@@ -8,14 +20,15 @@ const JsonMakePretty = () => {
   const [error, setError] = useState('');
   const [selectedPath, setSelectedPath] = useState('');
   const [showPathPopup, setShowPathPopup] = useState(false);
-  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0, showBelow: false });
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [indentSpaces, setIndentSpaces] = useState(2);
   const outputEditorRef = useRef(null);
   const outputEditorContainerRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
   const currentLineRef = useRef(null);
   const isHoveringTooltipRef = useRef(false);
-  const lastMousePositionRef = useRef({ x: 0, y: 0 });
+  const mousePositionRef = useRef({ x: 0, y: 0 });
+  const showPathPopupRef = useRef(false);
 
   const prettifyJson = (jsonString, spaces = indentSpaces) => {
     try {
@@ -24,7 +37,7 @@ const JsonMakePretty = () => {
         setError('');
         return;
       }
-      
+
       const parsed = JSON.parse(jsonString);
       const prettified = JSON.stringify(parsed, null, spaces);
       setOutputJson(prettified);
@@ -43,11 +56,13 @@ const JsonMakePretty = () => {
   }, []);
 
   const hideTooltip = useCallback(() => {
-    if (!isHoveringTooltipRef.current) {
-      setShowPathPopup(false);
-      setSelectedPath('');
-      currentLineRef.current = null;
-    }
+    setTimeout(() => {
+      if (!isHoveringTooltipRef.current) {
+        setShowPathPopup(false);
+        setSelectedPath('');
+        currentLineRef.current = null;
+      }
+    }, 300);
   }, []);
 
   useEffect(() => {
@@ -55,6 +70,26 @@ const JsonMakePretty = () => {
       clearHoverTimeout();
     };
   }, [clearHoverTimeout]);
+
+  useEffect(() => {
+    const container = outputEditorContainerRef.current;
+    if (!container) return;
+
+    const handleMouseMove = (e) => {
+      const rect = container.getBoundingClientRect();
+      mousePositionRef.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    };
+
+    container.addEventListener('mousemove', handleMouseMove);
+    return () => container.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  useEffect(() => {
+    showPathPopupRef.current = showPathPopup;
+  }, [showPathPopup]);
 
   const handleInputChange = (value) => {
     setInputJson(value || '');
@@ -87,17 +122,17 @@ const JsonMakePretty = () => {
   const getJsonPath = (lines, lineIndex) => {
     const stack = [];
     let arrayIndices = {};
-    
+
     for (let i = 0; i <= lineIndex; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
-      
+
       if (!trimmedLine) {
         continue;
       }
 
       const indent = line.search(/\S/);
-      
+
       while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
         const popped = stack.pop();
         if (popped.arrayIndent !== undefined) {
@@ -138,17 +173,17 @@ const JsonMakePretty = () => {
       if (keyMatch) {
         const key = keyMatch[1];
         const valueStart = keyMatch[2].trim();
-        
+
         const opensArrayNow = valueStart === '[' || valueStart.startsWith('[');
-        
-        stack.push({ 
-          key, 
+
+        stack.push({
+          key,
           indent,
           type: 'key',
           opensArray: opensArrayNow,
           arrayIndent: opensArrayNow ? indent : undefined
         });
-        
+
         if (opensArrayNow) {
           arrayIndices[indent] = -1;
         }
@@ -156,10 +191,10 @@ const JsonMakePretty = () => {
     }
 
     let path = [];
-    
+
     for (let i = 0; i < stack.length; i++) {
       const item = stack[i];
-      
+
       if (item.type === 'arrayElement') {
         if (item.parentKey) {
           if (path.length > 0 && path[path.length - 1].startsWith(item.parentKey)) {
@@ -171,7 +206,7 @@ const JsonMakePretty = () => {
         path.push(item.key);
       }
     }
-    
+
     return path.join('.');
   };
 
@@ -186,85 +221,68 @@ const JsonMakePretty = () => {
 
   const handleOutputEditorMount = (editor) => {
     outputEditorRef.current = editor;
-    
+
     editor.onMouseMove((e) => {
       const position = e.target.position;
-      
-      if (!position || e.target.type !== 6) { 
+
+      if (isHoveringTooltipRef.current) {
+        return;
+      }
+
+      if (!position || e.target.type !== 6) {
         clearHoverTimeout();
-        if (!isHoveringTooltipRef.current) {
+        if (!showPathPopupRef.current) {
           hideTooltip();
         }
         return;
       }
-      
+
       const lineIndex = position.lineNumber - 1;
-      
+
       if (currentLineRef.current === lineIndex && hoverTimeoutRef.current) {
         return;
       }
-      
+
       clearHoverTimeout();
-      
-      if (currentLineRef.current !== lineIndex && showPathPopup) {
-        setShowPathPopup(false);
+
+      if (currentLineRef.current !== lineIndex && showPathPopupRef.current && !isHoveringTooltipRef.current) {
+        hideTooltip();
       }
-      
+
       currentLineRef.current = lineIndex;
-      
+
       const model = editor.getModel();
       if (!model) {
         return;
       }
-      
+
       const content = model.getValue();
       const lines = content.split('\n');
-      
+
       if (lineIndex >= lines.length || lineIndex < 0) {
         return;
       }
-      
-      const mouseX = e.event.posx || e.event.clientX;
-      const mouseY = e.event.posy || e.event.clientY;
-      lastMousePositionRef.current = { x: mouseX, y: mouseY };
-      
+
       hoverTimeoutRef.current = setTimeout(() => {
         const path = getJsonPath(lines, lineIndex);
-        
+
         if (path) {
           setSelectedPath(path);
           setShowPathPopup(true);
-          
-          const { x, y } = lastMousePositionRef.current;
-          
-          const tooltipHeight = 30; 
-          const offsetY = 15; 
-          const showBelow = y < tooltipHeight + offsetY + 10;
-          
           setPopupPosition({
-            x: x,
-            y: showBelow ? y + offsetY : y - offsetY,
-            showBelow: showBelow
+            x: mousePositionRef.current.x,
+            y: mousePositionRef.current.y + 20
           });
         }
       }, 1000);
     });
-    
-    editor.onMouseLeave(() => {
-      clearHoverTimeout();
-      setTimeout(() => {
-        if (!isHoveringTooltipRef.current) {
-          hideTooltip();
-        }
-      }, 100);
-    });
-    
+
     editor.onDidScrollChange(() => {
       clearHoverTimeout();
       setShowPathPopup(false);
       currentLineRef.current = null;
     });
-    
+
     editor.onDidChangeModelContent(() => {
       clearHoverTimeout();
       setShowPathPopup(false);
@@ -292,11 +310,11 @@ const JsonMakePretty = () => {
         </div>
         <div className="section-label">Prettified JSON</div>
       </div>
-      
+
       <button onClick={clearAll} className="btn-clear-floating" title="Clear All">
         ×
       </button>
-      
+
       <div className="content">
         <div className="input-section">
           <div className="monaco-editor-wrapper">
@@ -306,6 +324,7 @@ const JsonMakePretty = () => {
               value={inputJson}
               onChange={handleInputChange}
               theme="vs-dark"
+              loading={<div style={{ color: '#fff', padding: '20px' }}>Loading editor...</div>}
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
@@ -318,11 +337,11 @@ const JsonMakePretty = () => {
             />
           </div>
         </div>
-        
+
         <div className="output-section">
           {error && <div className="error-message">{error}</div>}
-          <div 
-            className="monaco-editor-wrapper" 
+          <div
+            className="monaco-editor-wrapper"
             ref={outputEditorContainerRef}
           >
             <Editor
@@ -331,6 +350,7 @@ const JsonMakePretty = () => {
               value={outputJson}
               theme="vs-dark"
               onMount={handleOutputEditorMount}
+              loading={<div style={{ color: '#fff', padding: '20px' }}>Loading editor...</div>}
               options={{
                 readOnly: true,
                 minimap: { enabled: false },
@@ -341,27 +361,29 @@ const JsonMakePretty = () => {
                 tabSize: 2,
                 wordWrap: 'off',
                 domReadOnly: true,
+                hover: { enabled: false },
               }}
             />
+            {showPathPopup && (
+              <div
+                className="path-tooltip"
+                style={{
+                  position: 'absolute',
+                  left: `${popupPosition.x}px`,
+                  top: `${popupPosition.y}px`,
+                  transform: 'translateX(-50%)'
+                }}
+                onClick={copyPathToClipboard}
+                onMouseEnter={handleTooltipMouseEnter}
+                onMouseLeave={handleTooltipMouseLeave}
+                title="Click to copy"
+              >
+                {selectedPath}
+              </div>
+            )}
           </div>
         </div>
       </div>
-      
-      {showPathPopup && (
-        <div 
-          className={`path-tooltip ${popupPosition.showBelow ? 'tooltip-below' : 'tooltip-above'}`}
-          style={{ 
-            left: `${popupPosition.x}px`, 
-            top: `${popupPosition.y}px` 
-          }}
-          onClick={copyPathToClipboard}
-          onMouseEnter={handleTooltipMouseEnter}
-          onMouseLeave={handleTooltipMouseLeave}
-          title="Click to copy"
-        >
-          {selectedPath}
-        </div>
-      )}
     </div>
   );
 };

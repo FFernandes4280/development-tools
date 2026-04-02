@@ -4,7 +4,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react(), nodePolyfills()],
+  plugins: [
+    react(),
+    nodePolyfills()
+  ],
   build: {
     lib: {
       entry: path.resolve(__dirname, 'src/web-components/entry.js'),
@@ -12,13 +15,25 @@ export default defineConfig({
       fileName: () => 'json-formatter.esm.js'
     },
     rollupOptions: {
-      external: []
+      external: [],
+      output: {
+        inlineDynamicImports: true,
+        assetFileNames: 'assets/[name][extname]'
+      }
     },
-    cssCodeSplit: true
+    sourcemap: "inline",
+    cssCodeSplit: false,
+    cssInline: true
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')
     }
+  },
+  worker: {
+    format: 'es'
+  },
+  optimizeDeps: {
+    include: ['monaco-editor']
   }
 })
