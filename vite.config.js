@@ -21,7 +21,7 @@ export default defineConfig({
         assetFileNames: 'assets/[name][extname]'
       }
     },
-    sourcemap: "inline",
+    sourcemap: false,
     cssCodeSplit: false,
     cssInline: true
   },
