@@ -1,8 +1,8 @@
 import r2wc from '@r2wc/react-to-web-component'
 import SafeWrapper from './SafeWrapper.jsx'
 
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker&inline'
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker&inline'
 
 // Configure Monaco to use local workers BEFORE Monaco initializes
 if (typeof window !== 'undefined') {

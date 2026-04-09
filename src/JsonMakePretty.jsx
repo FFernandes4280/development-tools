@@ -335,7 +335,7 @@ const JsonMakePretty = () => {
                 wordWrap: 'off',
                 folding: true,
                 showFoldingControls: 'always',
-                foldingStrategy: 'auto',
+                foldingStrategy: 'indentation',
               }}
             />
           </div>
@@ -365,6 +365,9 @@ const JsonMakePretty = () => {
                 wordWrap: 'off',
                 domReadOnly: true,
                 hover: { enabled: false },
+                folding: true,
+                showFoldingControls: 'always',
+                foldingStrategy: 'indentation',
               }}
             />
             {showPathPopup && (
