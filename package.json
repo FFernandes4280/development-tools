@@ -12,8 +12,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
-    "preview": "vite preview"
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",

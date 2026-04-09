@@ -333,6 +333,9 @@ const JsonMakePretty = () => {
                 automaticLayout: true,
                 tabSize: 2,
                 wordWrap: 'off',
+                folding: true,
+                showFoldingControls: 'always',
+                foldingStrategy: 'auto',
               }}
             />
           </div>
