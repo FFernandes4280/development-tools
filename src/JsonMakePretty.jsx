@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor, { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import './JsonMakePretty.css';
@@ -16,80 +16,179 @@ loader.init().then(() => {
   console.error('[JSON Formatter] Monaco initialization failed:', err);
 });
 
+const MIN_EDITOR_HEIGHT = 180;
+
 const JsonMakePretty = () => {
-  const [inputJson, setInputJson] = useState('');
-  const [outputJson, setOutputJson] = useState('');
+  const [editorJson, setEditorJson] = useState('');
   const [error, setError] = useState('');
   const [indentSpaces, setIndentSpaces] = useState(2);
+  const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
+  const [validationStatus, setValidationStatus] = useState({ valid: false, message: '' });
 
   const outputEditorContainerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const resizeListenerRef = useRef(null);
   const {
+    outputEditorRef,
     tooltip,
     tooltipHandlers,
     handleOutputEditorMount,
     clearTooltip
   } = useJsonTooltip(outputEditorContainerRef);
 
-  const handlePrettify = useCallback((jsonString, spaces = indentSpaces) => {
-    const { prettified, error } = prettifyJson(jsonString, spaces);
-    setOutputJson(prettified);
-    setError(error);
+  const validateJson = useCallback((jsonString) => {
+    const trimmed = String(jsonString || '').trim();
+    if (!trimmed) {
+      return { valid: false, message: '' };
+    }
+
+    try {
+      JSON.parse(trimmed);
+      return { valid: true, message: '✓ Valid JSON' };
+    } catch (err) {
+      return { valid: false, message: `✗ Invalid JSON: ${err.message}` };
+    }
+  }, []);
+
+  const formatJson = useCallback((jsonString, spaces = indentSpaces) => {
+    return prettifyJson(jsonString, spaces);
   }, [indentSpaces]);
 
-  const handleInputChange = (value) => {
-    setInputJson(value || '');
-    handlePrettify(value || '');
+  const handleEditorChange = (value) => {
+    const newValue = value || '';
+    setEditorJson(newValue);
+    setError('');
+    setValidationStatus(validateJson(newValue));
   };
 
   const handleIndentChange = (e) => {
-    const value = parseInt(e.target.value);
+    const value = parseInt(e.target.value, 10);
     setIndentSpaces(value);
-    if (inputJson) {
-      handlePrettify(inputJson, value);
+  };
+
+  const handleFormat = () => {
+    const currentValue = outputEditorRef.current?.getValue() ?? editorJson;
+    const trimmedValue = String(currentValue).trim();
+
+    if (!trimmedValue) {
+      setError('');
+      setEditorJson(currentValue || '');
+      setValidationStatus({ valid: false, message: '' });
+      return;
     }
+
+    const { prettified, error } = formatJson(currentValue, indentSpaces);
+    if (error) {
+      setError(error);
+      setValidationStatus({ valid: false, message: error });
+      return;
+    }
+
+    const editor = outputEditorRef.current;
+    if (editor) {
+      const selection = editor.getSelection();
+      editor.pushUndoStop();
+      editor.setValue(prettified);
+      if (selection) {
+        editor.setSelection(selection);
+      }
+      editor.pushUndoStop();
+    }
+
+    setEditorJson(prettified);
+    setError('');
+    setValidationStatus({ valid: true, message: '✓ Valid JSON' });
   };
 
   const clearAll = () => {
-    setInputJson('');
-    setOutputJson('');
+    setEditorJson('');
     setError('');
+    setValidationStatus({ valid: false, message: '' });
     clearTooltip();
+  };
+
+  const handleCopyToClipboard = () => {
+    const text = editorJson || '';
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      setEditorJson(text);
+      setError('');
+      setValidationStatus(validateJson(text));
+    } catch (readError) {
+      setError('Failed to import JSON file.');
+      setValidationStatus({ valid: false, message: '✗ Invalid JSON: Failed to read file' });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDownload = () => {
+    const text = editorJson || '';
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'data.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (resizeListenerRef.current) {
+        resizeListenerRef.current.dispose();
+        resizeListenerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleEditorMount = (editor, monacoInstance) => {
+    handleOutputEditorMount(editor);
+
+    const updateHeight = (height) => {
+      const newHeight = Math.max(height, MIN_EDITOR_HEIGHT);
+      setEditorHeight(newHeight);
+      window.requestAnimationFrame(() => editor.layout());
+    };
+
+    updateHeight(editor.getContentHeight());
+
+    if (resizeListenerRef.current) {
+      resizeListenerRef.current.dispose();
+    }
+
+    resizeListenerRef.current = editor.onDidContentSizeChange((e) => {
+      updateHeight(e.contentHeight);
+    });
   };
 
   return (
     <div className="json-make-pretty">
-      <style>{`
-        .indent-control {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .btn-clear {
-          background-color: #ffffff; 
-          color: #475569; 
-          border: 1px solid #cbd5e1; 
-          border-radius: 6px; 
-          padding: 0 14px;
-          font-size: 14px;
-          font-family: inherit;
-          cursor: pointer;
-          height: 34px; 
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s ease;
-        }
-        .btn-clear:hover {
-          background-color: #f8fafc;
-          border-color: #94a3b8;
-        }
-        .btn-clear:active {
-          background-color: #f1f5f9;
-        }
-      `}</style>
-
       <div className="controls-bar">
-        <div className="section-label">JSON Input</div>
+        <div className="header-left">
+          <div className="section-label">JSON Editor</div>
+          <div className="toolbar-links">
+            <button type="button" className="btn-link" onClick={handleImportClick} title="Import JSON file">
+              Import
+            </button>
+            <button type="button" className="btn-link" onClick={handleDownload} title="Download JSON file">
+              Download
+            </button>
+          </div>
+        </div>
 
         <div className="indent-control">
           <label htmlFor="indent-spaces">Indent:</label>
@@ -105,55 +204,40 @@ const JsonMakePretty = () => {
             <option value={8}>8 spaces</option>
           </select>
 
-          <button onClick={clearAll} className="btn-clear" title="Clear All">
+          <button onClick={handleFormat} className="btn-action btn-primary" title="Format JSON">
+            Format
+          </button>
+
+          <button onClick={handleCopyToClipboard} className="btn-action btn-secondary" title="Copy editor content">
+            Copy
+          </button>
+
+          <button onClick={clearAll} className="btn-action btn-secondary" title="Clear Editor">
             Clear
           </button>
         </div>
-
-        <div className="section-label">Prettified JSON</div>
       </div>
 
-      <div className="content">
-        <div className="input-section">
-          <div className="monaco-editor-wrapper">
-            <Editor
-              height="100%"
-              defaultLanguage="json"
-              value={inputJson}
-              onChange={handleInputChange}
-              theme="vs-dark"
-              loading={<div style={{ color: '#fff', padding: '20px' }}>Loading editor...</div>}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 2,
-                wordWrap: 'off',
-                folding: true,
-                showFoldingControls: 'always',
-                foldingStrategy: 'indentation',
-              }}
-            />
-          </div>
-        </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        style={{ display: 'none' }}
+        onChange={handleFileImport}
+      />
 
-        <div className="output-section">
-          {error && <div className="error-message">{error}</div>}
-          <div
-            className="monaco-editor-wrapper"
-            ref={outputEditorContainerRef}
-          >
+      <div className="content">
+        <div className="editor-section">
+          <div className="monaco-editor-wrapper" ref={outputEditorContainerRef}>
             <Editor
-              height="100%"
+              height={`${editorHeight}px`}
               defaultLanguage="json"
-              value={outputJson}
+              value={editorJson}
+              onChange={handleEditorChange}
               theme="vs-dark"
-              onMount={handleOutputEditorMount}
+              onMount={handleEditorMount}
               loading={<div style={{ color: '#fff', padding: '20px' }}>Loading editor...</div>}
               options={{
-                readOnly: true,
                 minimap: { enabled: false },
                 fontSize: 14,
                 lineNumbers: 'on',
@@ -161,13 +245,25 @@ const JsonMakePretty = () => {
                 automaticLayout: true,
                 tabSize: 2,
                 wordWrap: 'off',
-                domReadOnly: true,
-                hover: { enabled: false },
                 folding: true,
                 showFoldingControls: 'always',
                 foldingStrategy: 'indentation',
+                scrollbar: {
+                  vertical: 'hidden',
+                  horizontal: 'auto',
+                  alwaysConsumeMouseWheel: false,
+                },
               }}
             />
+            <div className="editor-status-bar">
+              {validationStatus.message ? (
+                <span className={`status-badge ${validationStatus.valid ? 'valid' : 'invalid'}`}>
+                  {validationStatus.message}
+                </span>
+              ) : (
+                <span className="status-placeholder">JSON status will appear here</span>
+              )}
+            </div>
             {tooltip.show && (
               <div
                 className="path-tooltip"
