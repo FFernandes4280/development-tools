@@ -54,4 +54,3 @@ Run the development server:
 npm run dev
 ```
 
-Or access the link [here](https://ffernandes4280.github.io/development-tools/).

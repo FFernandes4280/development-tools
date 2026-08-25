@@ -1,16 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="JSON formatter and prettifier" />
-    <link rel="manifest" href="./manifest.json" />
-    <title>JSON Make Pretty</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <json-formatter></json-formatter>
-    <script type="module" src="/src/web-components/entry.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Development Tools</title>
+
+  <style>
+    @font-face {
+      font-family: "codicon";
+      src: url("https://cdn.jsdelivr.net/npm/monaco-editor/min/vs/base/browser/ui/codicons/codicon/codicon.ttf") format("truetype");
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <json-formatter></json-formatter>
+  <script type="module" src="./json-formatter.esm.js"></script>
+  
+</body>
 </html>

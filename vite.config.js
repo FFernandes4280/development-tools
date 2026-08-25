@@ -3,8 +3,22 @@ import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
 
+// In dev mode (npm run dev), redirect requests for json-formatter.esm.js to the source entry point
+const devWebComponentPlugin = () => ({
+  name: 'dev-web-component-entry',
+  apply: 'serve',
+  resolveId(id) {
+    if (id.endsWith('json-formatter.esm.js')) {
+      return path.resolve(__dirname, 'src/web-components/entry.js')
+    }
+  }
+})
+
 export default defineConfig({
+  base: '/development-tools/',
+  
   plugins: [
+    devWebComponentPlugin(),
     react(),
     nodePolyfills()
   ],

@@ -12,7 +12,10 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build"
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build && cp index.html dist/",
+    "deploy": "gh-pages -d dist"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",
